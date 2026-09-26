@@ -24,8 +24,8 @@ DERIVED="$BUILD_DIR/DerivedData"
 ARCHIVE="$BUILD_DIR/$SCHEME.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 
-# The version comes from git, so a release is one step: tag and push. Nothing in the
-# project file has to be edited first.
+# The version comes from git, so a release is one step: tag and push. Nothing in
+# the project file has to be edited first.
 #   MARKETING_VERSION        the highest v* tag on HEAD, without its "v"; on an untagged
 #                            commit, the nearest tag behind it. Export it to override —
 #                            CI does, from the tag that triggered the run.
@@ -103,19 +103,16 @@ if [ "$MODE" = "unsigned" ]; then
   mkdir -p "$BUILD_DIR/Payload" "$EXPORT_DIR"
   cp -R "$APP" "$BUILD_DIR/Payload/"
   rm -rf "$BUILD_DIR/Payload/$SCHEME.app/_CodeSignature"
+  # Strip the widget extension: sideload signing tools (i4Tools) fail to re-sign
+  # the .appex, causing "安装包验证失败". The main app works without it; only
+  # the home-screen widget and Live Activity are lost.
+  echo "==> Removing widget extension"
+  rm -rf "$BUILD_DIR/Payload/$SCHEME.app/PlugIns"
   # The linker records the absolute path of every object file in the symbol table
   # (N_OSO debug-map entries), which -file-prefix-map does not reach. Stripping
   # debug and local symbols removes them. The dSYM in DerivedData keeps whatever
   # is needed to symbolicate a crash later.
   xcrun strip -S -x "$BUILD_DIR/Payload/$SCHEME.app/$SCHEME"
-  # App extensions — the widget — are bundles of their own inside PlugIns, with their
-  # own executable, their own signature directory and their own debug map. Stripping
-  # only the app binary shipped the extension's build paths untouched.
-  while IFS= read -r -d '' appex; do
-    rm -rf "$appex/_CodeSignature"
-    executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$appex/Info.plist")"
-    xcrun strip -S -x "$appex/$executable"
-  done < <(find "$BUILD_DIR/Payload/$SCHEME.app" -name '*.appex' -type d -print0)
   (cd "$BUILD_DIR" && zip -qry "export/$SCHEME-unsigned.ipa" Payload)
   rm -rf "$BUILD_DIR/Payload"
   IPA="$EXPORT_DIR/$SCHEME-unsigned.ipa"
